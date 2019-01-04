@@ -243,7 +243,7 @@ impl<ErrType,
         }
     }
 }
-impl<ErrType,
+impl<ErrType: IsTransient,
      R: CustomRead<ErrType>,
      BufferType : SliceWrapperMut<u8>,
      AllocU8 : Allocator<u8>,
@@ -263,8 +263,11 @@ impl<ErrType,
         if self.input_len < self.input_buffer.slice_mut().len() && !self.input_eof {
           match self.input.read(&mut self.input_buffer.slice_mut()[self.input_len..]) {
             Err(e) => {
+              let is_transient = e.is_transient();
               self.read_error = Some(e);
-              self.input_eof = true;
+              if !is_transient {
+                self.input_eof = true;
+              }
             },
             Ok(size) => if size == 0 {
               self.input_eof = true;
@@ -301,3 +304,13 @@ impl<ErrType,
     }
 }
 
+pub trait IsTransient {
+    fn is_transient(&self) -> bool;
+}
+
+#[cfg(feature="std")]
+impl IsTransient for Error {
+    fn is_transient(&self) -> bool {
+        self.kind() == ErrorKind::WouldBlock
+    }
+}
